@@ -55,9 +55,6 @@ func validate() (*generator.Config, error) {
 	}
 
 	trs := strings.TrimSpace(*transitions)
-	if trs == "" {
-		return nil, fmt.Errorf("-transitions value required")
-	}
 	for _, t := range strings.Split(trs, ",") {
 		tt := strings.TrimSpace(t)
 		tts := strings.Split(t, ":")
