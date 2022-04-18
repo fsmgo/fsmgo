@@ -55,25 +55,27 @@ func validate() (*generator.Config, error) {
 	}
 
 	trs := strings.TrimSpace(*transitions)
-	for _, t := range strings.Split(trs, ",") {
-		tt := strings.TrimSpace(t)
-		tts := strings.Split(t, ":")
-		if len(tts) != 3 {
-			return nil, fmt.Errorf("invalid transition: %v", tt)
+	if trs != "" {
+		for _, t := range strings.Split(trs, ",") {
+			tt := strings.TrimSpace(t)
+			tts := strings.Split(t, ":")
+			if len(tts) != 3 {
+				return nil, fmt.Errorf("invalid transition: %v", tt)
+			}
+			frm := strings.TrimSpace(tts[0])
+			if _, ok := sSet[frm]; !ok {
+				return nil, fmt.Errorf("transition %q: 'from' state %q is not in the states list", tt, frm)
+			}
+			ev := strings.TrimSpace(tts[1])
+			if _, ok := eSet[ev]; !ok {
+				return nil, fmt.Errorf("transition %q: event %q is not in the event list", tt, frm)
+			}
+			to := strings.TrimSpace(tts[2])
+			if _, ok := sSet[to]; !ok {
+				return nil, fmt.Errorf("transition %q: 'to' state %q is not in the states list", tt, to)
+			}
+			rt.Transitions = append(rt.Transitions, [...]string{frm, ev, to})
 		}
-		frm := strings.TrimSpace(tts[0])
-		if _, ok := sSet[frm]; !ok {
-			return nil, fmt.Errorf("transition %q: 'from' state %q is not in the states list", tt, frm)
-		}
-		ev := strings.TrimSpace(tts[1])
-		if _, ok := eSet[ev]; !ok {
-			return nil, fmt.Errorf("transition %q: event %q is not in the event list", tt, frm)
-		}
-		to := strings.TrimSpace(tts[2])
-		if _, ok := sSet[to]; !ok {
-			return nil, fmt.Errorf("transition %q: 'to' state %q is not in the states list", tt, to)
-		}
-		rt.Transitions = append(rt.Transitions, [...]string{frm, ev, to})
 	}
 
 	pkg := strings.TrimSpace(*pkg)
