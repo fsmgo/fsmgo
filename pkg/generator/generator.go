@@ -96,12 +96,12 @@ type {{.State}}State struct {
 }
 {{ $state := (print .State "State") }}
 // {{.CapState}} is a singleton object for "{{.State}}"
-var {{.CapState}} State 
+var {{.CapState}} State = init{{.CapState}}()
 
-func init() {
+func init{{.CapState}}() *{{ $state }}{
 	s := &{{ $state }}{}
 	s.h = s
-	{{.CapState}} = s
+	return s
 }
 
 func (s *{{$state}}) String() string {
