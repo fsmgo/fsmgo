@@ -39,6 +39,14 @@ type BaseParam struct {
 	Events  []EventInfo
 }
 
+const eventsTemplate = `package {{.Package}}
+{{- range .Events }}
+
+// Event{{.Event}} is a constant for "{{.Event}}" event
+const Event{{.Event}} = "{{.Event}}"
+{{- end }}
+`
+
 const baseTemplate = `package {{.Package}}
 
 import (
@@ -85,7 +93,7 @@ func (s *base) OnExit(ctx context.Context, d *FSM) error {
 func (s *base) OnEvent(ctx context.Context, d *FSM, e Event) (State, error) {
 	switch e.Type {
 	{{- range .Events }}
-	case "{{.Event}}":
+	case Event{{.Event}}:
 		return s.h.{{.Method}}(ctx, d.StateContext)
 	{{- end }}
 	default:
@@ -274,6 +282,7 @@ func Generate(cfg *Config) error {
 		return err
 	}
 
+	eventsTempl := template.Must(template.New("events").Parse(eventsTemplate))
 	baseTempl := template.Must(template.New("base").Parse(baseTemplate))
 	stateTempl := template.Must(template.New("state").Parse(stateTemplate))
 	stateTestTempl := template.Must(template.New("state_test").Parse(stateTestTemplate))
@@ -283,6 +292,9 @@ func Generate(cfg *Config) error {
 		Events:  eventsToMethods(events),
 	}
 	if err := ensurePath(cfg.Path); err != nil {
+		return err
+	}
+	if err := exec(filepath.Join(cfg.Path, "events.go"), eventsTempl, b); err != nil {
 		return err
 	}
 	if err := exec(filepath.Join(cfg.Path, "base.go"), baseTempl, b); err != nil {
