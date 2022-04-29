@@ -32,6 +32,7 @@ type StateParam struct {
 	Events         []EventInfo
 	Transitions    []transitionInfo
 	TransitionsMap map[string]string
+	CommonsHere    bool
 }
 
 type BaseParam struct {
@@ -147,15 +148,24 @@ import (
 	"github.com/fsmgo/fsmgo/pkg/fsm"
 	"github.com/rs/zerolog"
 )
-{{ $st := .CapState }}
-{{ $trs := .TransitionsMap }}
-{{ range .Events }}
+
+{{- if .CommonsHere }}
+
+func newTestStateContext() *StateContext {
+	return &StateContext{}
+}
+
+{{- end }}
+{{- $st := .CapState }}
+{{- $trs := .TransitionsMap }}
+{{- range .Events }}
 func Test{{$st}}{{.Method}}Async(t *testing.T) {
 	cfg := fsm.Config{
 		Id:     "test",
 		Logger: zerolog.New(zerolog.NewTestWriter(t)),
 	}
-	sm := fsm.NewStateMachine(&cfg, {{$st}}, &StateContext{})
+	stCtx := newTestStateContext()
+	sm := fsm.NewStateMachine(&cfg, {{$st}}, stCtx)
 	err := sm.AddEvent(Event{
 		Type: "{{.Event}}",
 	})
@@ -300,7 +310,7 @@ func Generate(cfg *Config) error {
 	if err := exec(filepath.Join(cfg.Path, "base.go"), baseTempl, b); err != nil {
 		return err
 	}
-
+	needCommons := true
 	for _, state := range states {
 		st := convertCase(state)
 		tm := make(map[string]string)
@@ -314,7 +324,9 @@ func Generate(cfg *Config) error {
 			CapState:       st,
 			Transitions:    stateTrans[state],
 			TransitionsMap: tm,
+			CommonsHere:    needCommons,
 		}
+		needCommons = false
 		if err := exec(filepath.Join(cfg.Path, state+".go"), stateTempl, s); err != nil {
 			return err
 		}
