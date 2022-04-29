@@ -50,6 +50,9 @@ type Config struct {
 	Id string
 	// EventBacklogSize is the size of the Event queue
 	EventBacklogSize uint
+	// EventBacklogSize if is set, do not call OnEnter on initial state
+	// when FSM created
+	SkipInitEnter bool
 	// Logger is the logger to Logger internal events
 	Logger zerolog.Logger
 }
@@ -157,8 +160,10 @@ func NewStateMachine[E Event, D any](cfg *Config, init State[E, D], data *D) *St
 		events:       make(chan E, cfg.EventBacklogSize),
 		state:        init,
 	}
-	if err := rt.state.OnEnter(context.Background(), rt); err != nil {
-		rt.state, _ = rt.state.OnError(context.Background(), rt, err)
+	if !cfg.SkipInitEnter {
+		if err := rt.state.OnEnter(context.Background(), rt); err != nil {
+			rt.state, _ = rt.state.OnError(context.Background(), rt, err)
+		}
 	}
 	go func() {
 		defer close(rt.events)

@@ -351,3 +351,27 @@ func TestDoubleStop(t *testing.T) {
 	sm.Stop()
 	sm.Stop()
 }
+
+func TestSkipInitEnter(t *testing.T) {
+	data := &myStateContext{}
+	state1 := newState("init")
+
+	cfg := testFsmConfig()
+	cfg.SkipInitEnter = true
+	_ = NewStateMachine[myEvent, myStateContext](cfg, state1, data)
+	if state1.enterCalled {
+		t.Errorf("OnEnter called when cfg.SkipInitEnter flag is set")
+	}
+}
+
+func TestSkipInitEnter2(t *testing.T) {
+	data := &myStateContext{}
+	state1 := newState("init")
+
+	cfg := testFsmConfig()
+	cfg.SkipInitEnter = false
+	_ = NewStateMachine[myEvent, myStateContext](cfg, state1, data)
+	if !state1.enterCalled {
+		t.Errorf("OnEnter NOT called when cfg.SkipInitEnter flag is not set")
+	}
+}
