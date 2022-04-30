@@ -21,15 +21,16 @@ import (
 	"fmt"
 	"github.com/fsmgo/fsmgo/pkg/generator"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
 var states = flag.String("states", "", "comma-separated list of states")
 var events = flag.String("events", "", "comma-separated list of events")
 var transitions = flag.String("transitions", "", "comma-separated list of from:event:to tuples")
-var pkg = flag.String("package", "", "target package")
+var packg = flag.String("package", "", "target package")
 var notests = flag.Bool("notests", false, "do not generate tests")
-var dir = flag.String("dir", ".", "target path to put generated files in")
+var dir = flag.String("dir", "", "target path to put generated files in")
 
 func main() {
 	flag.Parse()
@@ -94,10 +95,22 @@ func validate() (*generator.Config, error) {
 		}
 	}
 
-	pkg := strings.TrimSpace(*pkg)
+	pkg := strings.TrimSpace(*packg)
 	if pkg == "" {
-		return nil, fmt.Errorf("-package value required")
+		if *dir == "" {
+			return nil, fmt.Errorf("-package or -dir value required")
+		} else {
+			p, err := filepath.Abs(*dir)
+			if err != nil {
+				return nil, err
+			}
+			pkg = filepath.Base(p)
+		}
 	}
+	if *dir == "" {
+		*dir = pkg
+	}
+
 	rt.Pkg = pkg
 	rt.NoTests = *notests
 	rt.Path = *dir
