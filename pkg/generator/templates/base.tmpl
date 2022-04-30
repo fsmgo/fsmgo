@@ -48,7 +48,7 @@ func (s *base) OnEvent(ctx context.Context, d *FSM, e Event) (State, error) {
 		return s.h.{{.Method}}(ctx, d.StateContext)
 	{{- end }}
 	default:
-		d.Logger.Warn().Str("event", e.Type).Msg("unknown event")
+		d.Logger.Warn().Msgf("unknown event: %v", e.Type)
 	}
 	return nil, nil
 }
