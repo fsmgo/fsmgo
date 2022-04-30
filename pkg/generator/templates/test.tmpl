@@ -26,7 +26,7 @@ func Test{{$st}}{{.Method}}Async(t *testing.T) {
 	stCtx := newTestStateContext()
 	sm := fsm.NewStateMachine(&cfg, {{$st}}, stCtx)
 	err := sm.AddEvent(Event{
-		Type: Event{{.Event}},
+		Type: Event{{.CapEvent}},
 	})
 	if err != nil {
 		t.Errorf("FSM error: %v", err)
@@ -52,7 +52,7 @@ func Test{{$st}}{{.Method}}Sync(t *testing.T) {
     sm := fsm.NewStateMachine(&cfg, {{$st}}, stCtx)
 	ctx := context.Background()
 	err := sm.ProcessEvent(ctx, Event{
-		Type: Event{{.Event}},
+		Type: Event{{.CapEvent}},
 	})
 	if err != nil {
 		t.Errorf("FSM error: %v", err)

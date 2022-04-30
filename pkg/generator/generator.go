@@ -54,8 +54,9 @@ var stateTemplate string
 var stateTestTemplate string
 
 type EventInfo struct {
-	Event  string
-	Method string
+	Event    string
+	CapEvent string
+	Method   string
 }
 
 func convertCase(s string) string {
@@ -67,8 +68,13 @@ func convertCase(s string) string {
 func eventsToMethods(evs []string) []EventInfo {
 	var rt []EventInfo
 	for _, e := range evs {
-		s := "On" + convertCase(e)
-		rt = append(rt, EventInfo{e, s})
+		capEvent := convertCase(e)
+		m := "On" + capEvent
+		rt = append(rt, EventInfo{
+			Event:    e,
+			CapEvent: capEvent,
+			Method:   m,
+		})
 	}
 	return rt
 }
