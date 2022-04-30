@@ -32,18 +32,25 @@ var packg = flag.String("package", "", "target package")
 var notests = flag.Bool("notests", false, "do not generate tests")
 var dir = flag.String("dir", "", "target path to put generated files in")
 
+const version = "0.0.2"
+
 func main() {
+	fmt.Fprintf(os.Stdout, "FSMgo generator v%s\n", version)
+
 	flag.Parse()
 	cfg, err := validate()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err.Error())
 		os.Exit(-1)
 	}
+	fmt.Fprintf(os.Stdout, "Writing to %s\n", cfg.Path)
+
 	err = generator.Generate(cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Generator error: %v\n", err.Error())
 		os.Exit(-2)
 	}
+	fmt.Fprintf(os.Stdout, "All done\n")
 }
 
 func validate() (*generator.Config, error) {
