@@ -54,6 +54,7 @@ func (s *base) OnEvent(ctx context.Context, d *FSM, e Event) (State, error) {
 }
 
 {{- range .Events }}
+
 // {{.Method}} is a default (dummy) handler of "{{.Event}}" event
 func (s *base) {{.Method}}(ctx context.Context, sc *StateContext) (State, error) {
 	return nil, nil
