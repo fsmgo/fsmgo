@@ -17,6 +17,7 @@
 package generator
 
 import (
+	_ "embed"
 	"fmt"
 	"html/template"
 	"os"
@@ -40,175 +41,17 @@ type BaseParam struct {
 	Events  []EventInfo
 }
 
-const eventsTemplate = `package {{.Package}}
-{{- range .Events }}
+//go:embed templates/events.tmpl
+var eventsTemplate string
 
-// Event{{.Event}} is a constant for "{{.Event}}" event
-const Event{{.Event}} = "{{.Event}}"
-{{- end }}
-`
+//go:embed templates/base.tmpl
+var baseTemplate string
 
-const baseTemplate = `package {{.Package}}
+//go:embed templates/state.tmpl
+var stateTemplate string
 
-import (
-	"context"
-	"github.com/fsmgo/fsmgo/pkg/fsm"
-)
-
-type Event struct {
-	Type string
-}
-func (e Event) String() string {
-	return e.Type
-}
-
-type StateContext struct {
-}
-
-type FSM = fsm.StateMachine[Event, StateContext]
-type State = fsm.State[Event, StateContext]
-
-type EventHandler interface {
-	{{- range .Events }}
-	// {{.Method}} processes event "{{.Event}}" 
-	{{.Method}}(ctx context.Context, sc *StateContext) (State, error)
-	{{- end }}
-}
-type base struct {
-	h EventHandler
-}
-// OnError is a default error handler
-func (s *base) OnError(ctx context.Context, d *FSM, err error) (State, error) {
-	return nil, nil
-}
-// OnEnter is a default enter handler
-func (s *base) OnEnter(ctx context.Context, d *FSM) error {
-	return nil
-}
-// OnExit is a default exit handler
-func (s *base) OnExit(ctx context.Context, d *FSM) error {
-	return nil
-}
-
-// OnEvent is a main event handler function
-func (s *base) OnEvent(ctx context.Context, d *FSM, e Event) (State, error) {
-	switch e.Type {
-	{{- range .Events }}
-	case Event{{.Event}}:
-		return s.h.{{.Method}}(ctx, d.StateContext)
-	{{- end }}
-	default:
-		d.Logger.Warn().Str("event", e.Type).Msg("unknown event")
-	}
-	return nil, nil
-}
-
-{{- range .Events }}
-// {{.Method}} is a default (dummy) handler of "{{.Event}}" event
-func (s *base) {{.Method}}(ctx context.Context, sc *StateContext) (State, error) {
-	return nil, nil
-}
-{{- end }}
-`
-
-const stateTemplate = `package {{.Package}}
-{{- if .Transitions }}
-import "context"
-{{- end }}
-
-type {{.State}}State struct {
-	base
-}
-{{ $state := (print .State "State") }}
-// {{.CapState}} is a singleton object for "{{.State}}"
-var {{.CapState}} State = init{{.CapState}}()
-
-func init{{.CapState}}() *{{ $state }}{
-	s := &{{ $state }}{}
-	s.h = s
-	return s
-}
-
-func (s *{{$state}}) String() string {
-	return "{{.CapState}}"
-}
-{{range .Transitions}}
-func (s *{{$state}}) On{{.Event}}(ctx context.Context, sc *StateContext) (State, error) {
-	return {{.ToState}}, nil
-}
-{{end}}
-`
-
-const stateTestTemplate = `package {{.Package}}
-
-import (
-	"context"
-	"testing"
-
-	"github.com/fsmgo/fsmgo/pkg/fsm"
-	"github.com/rs/zerolog"
-)
-
-{{- if .CommonsHere }}
-
-func newTestStateContext() *StateContext {
-	return &StateContext{}
-}
-
-{{- end }}
-{{- $st := .CapState }}
-{{- $trs := .TransitionsMap }}
-{{- range .Events }}
-func Test{{$st}}{{.Method}}Async(t *testing.T) {
-	cfg := fsm.Config{
-		Id:     "test",
-		Logger: zerolog.New(zerolog.NewTestWriter(t)),
-	}
-	stCtx := newTestStateContext()
-	sm := fsm.NewStateMachine(&cfg, {{$st}}, stCtx)
-	err := sm.AddEvent(Event{
-		Type: "{{.Event}}",
-	})
-	if err != nil {
-		t.Errorf("FSM error: %v", err)
-	}
-	sm.Stop()
-
-	{{- if index $trs .Event }}
-	expected := {{ index $trs .Event }}
-	{{- else }}
-	expected := {{ $st }}
-	{{- end }}
-	if expected.String() != sm.State() {
-		t.Errorf("Unexpected state: got %v, expected %v\n", sm.State(), expected.String())
-	}
-}
-
-func Test{{$st}}{{.Method}}Sync(t *testing.T) {
-	cfg := fsm.Config{
-		Id:     "test",
-		Logger: zerolog.New(zerolog.NewTestWriter(t)),
-	}
-	sm := fsm.NewStateMachine(&cfg, {{$st}}, &StateContext{})
-	ctx := context.Background()
-	err := sm.ProcessEvent(ctx, Event{
-		Type: "{{.Event}}",
-	})
-	if err != nil {
-		t.Errorf("FSM error: %v", err)
-	}
-
-	{{- if index $trs .Event }}
-	expected := {{ index $trs .Event }}
-	{{- else }}
-	expected := {{ $st }}
-	{{- end }}
-	if expected.String() != sm.State() {
-		t.Errorf("Unexpected state: got %v, expected %v\n", sm.State(), expected.String())
-	}
-}
-{{ end }}
-`
+//go:embed templates/test.tmpl
+var stateTestTemplate string
 
 type EventInfo struct {
 	Event  string

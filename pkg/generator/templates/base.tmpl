@@ -1,0 +1,61 @@
+package {{.Package}}
+
+import (
+	"context"
+	"github.com/fsmgo/fsmgo/pkg/fsm"
+)
+
+type Event struct {
+	Type string
+}
+func (e Event) String() string {
+	return e.Type
+}
+
+type StateContext struct {
+}
+
+type FSM = fsm.StateMachine[Event, StateContext]
+type State = fsm.State[Event, StateContext]
+
+type EventHandler interface {
+	{{- range .Events }}
+	// {{.Method}} processes event "{{.Event}}"
+	{{.Method}}(ctx context.Context, sc *StateContext) (State, error)
+	{{- end }}
+}
+type base struct {
+	h EventHandler
+}
+// OnError is a default error handler
+func (s *base) OnError(ctx context.Context, d *FSM, err error) (State, error) {
+	return nil, nil
+}
+// OnEnter is a default enter handler
+func (s *base) OnEnter(ctx context.Context, d *FSM) error {
+	return nil
+}
+// OnExit is a default exit handler
+func (s *base) OnExit(ctx context.Context, d *FSM) error {
+	return nil
+}
+
+// OnEvent is a main event handler function
+func (s *base) OnEvent(ctx context.Context, d *FSM, e Event) (State, error) {
+	switch e.Type {
+	{{- range .Events }}
+	case Event{{.Event}}:
+		return s.h.{{.Method}}(ctx, d.StateContext)
+	{{- end }}
+	default:
+		d.Logger.Warn().Str("event", e.Type).Msg("unknown event")
+	}
+	return nil, nil
+}
+
+{{- range .Events }}
+// {{.Method}} is a default (dummy) handler of "{{.Event}}" event
+func (s *base) {{.Method}}(ctx context.Context, sc *StateContext) (State, error) {
+	return nil, nil
+}
+{{- end }}

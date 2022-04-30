@@ -1,0 +1,69 @@
+package {{.Package}}
+
+import (
+	"context"
+	"testing"
+
+	"github.com/fsmgo/fsmgo/pkg/fsm"
+	"github.com/rs/zerolog"
+)
+
+{{- if .CommonsHere }}
+
+func newTestStateContext() *StateContext {
+	return &StateContext{}
+}
+
+{{- end }}
+{{- $st := .CapState }}
+{{- $trs := .TransitionsMap }}
+{{- range .Events }}
+func Test{{$st}}{{.Method}}Async(t *testing.T) {
+	cfg := fsm.Config{
+		Id:     "test",
+		Logger: zerolog.New(zerolog.NewTestWriter(t)),
+	}
+	stCtx := newTestStateContext()
+	sm := fsm.NewStateMachine(&cfg, {{$st}}, stCtx)
+	err := sm.AddEvent(Event{
+		Type: "{{.Event}}",
+	})
+	if err != nil {
+		t.Errorf("FSM error: %v", err)
+	}
+	sm.Stop()
+
+	{{- if index $trs .Event }}
+	expected := {{ index $trs .Event }}
+	{{- else }}
+	expected := {{ $st }}
+	{{- end }}
+	if expected.String() != sm.State() {
+		t.Errorf("Unexpected state: got %v, expected %v\n", sm.State(), expected.String())
+	}
+}
+
+func Test{{$st}}{{.Method}}Sync(t *testing.T) {
+	cfg := fsm.Config{
+		Id:     "test",
+		Logger: zerolog.New(zerolog.NewTestWriter(t)),
+	}
+	sm := fsm.NewStateMachine(&cfg, {{$st}}, &StateContext{})
+	ctx := context.Background()
+	err := sm.ProcessEvent(ctx, Event{
+		Type: "{{.Event}}",
+	})
+	if err != nil {
+		t.Errorf("FSM error: %v", err)
+	}
+
+	{{- if index $trs .Event }}
+	expected := {{ index $trs .Event }}
+	{{- else }}
+	expected := {{ $st }}
+	{{- end }}
+	if expected.String() != sm.State() {
+		t.Errorf("Unexpected state: got %v, expected %v\n", sm.State(), expected.String())
+	}
+}
+{{ end }}

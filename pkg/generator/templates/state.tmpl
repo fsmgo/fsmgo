@@ -1,0 +1,26 @@
+package {{.Package}}
+{{- if .Transitions }}
+import "context"
+{{- end }}
+
+type {{.State}}State struct {
+	base
+}
+{{ $state := (print .State "State") }}
+// {{.CapState}} is a singleton object for "{{.State}}"
+var {{.CapState}} State = init{{.CapState}}()
+
+func init{{.CapState}}() *{{ $state }}{
+	s := &{{ $state }}{}
+	s.h = s
+	return s
+}
+
+func (s *{{$state}}) String() string {
+	return "{{.CapState}}"
+}
+{{range .Transitions}}
+func (s *{{$state}}) On{{.Event}}(ctx context.Context, sc *StateContext) (State, error) {
+	return {{.ToState}}, nil
+}
+{{end}}

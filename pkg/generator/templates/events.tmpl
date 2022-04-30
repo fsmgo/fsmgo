@@ -1,0 +1,6 @@
+package {{.Package}}
+{{- range .Events }}
+
+// Event{{.Event}} is a constant for "{{.Event}}" event
+const Event{{.Event}} = "{{.Event}}"
+{{- end }}
