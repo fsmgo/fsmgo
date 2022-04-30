@@ -44,7 +44,7 @@ func (s *base) OnExit(ctx context.Context, d *FSM) error {
 func (s *base) OnEvent(ctx context.Context, d *FSM, e Event) (State, error) {
 	switch e.Type {
 	{{- range .Events }}
-	case Event{{.Event}}:
+	case Event{{.CapEvent}}:
 		return s.h.{{.Method}}(ctx, d.StateContext)
 	{{- end }}
 	default:
