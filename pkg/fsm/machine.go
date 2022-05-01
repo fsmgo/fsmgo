@@ -19,7 +19,6 @@ package fsm
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 
 	"github.com/rs/zerolog"
@@ -34,7 +33,7 @@ type State[E Event, D any] interface {
 
 	OnEnter(ctx context.Context, sm *StateMachine[E, D]) error
 	OnExit(ctx context.Context, sm *StateMachine[E, D]) error
-	OnError(ctx context.Context, sm *StateMachine[E, D], err error) (State[E, D], error)
+	OnError(ctx context.Context, e E, sm *StateMachine[E, D], err error) (State[E, D], error)
 
 	String() string
 }
@@ -122,16 +121,14 @@ func (sm *StateMachine[E, D]) Done() <-chan any {
 
 func (sm *StateMachine[E, D]) handleEvent(ctx context.Context, ev E) {
 	defer sm.evQ.Done()
-	errLog := func(state fmt.Stringer, event fmt.Stringer, err error) *zerolog.Event {
-		return sm.Logger.Error().Err(err).Stringer("State", state).Stringer("Event", event)
-	}
+	l := sm.Logger.Error().Stringer("State", sm.state).Stringer("Event", ev)
 
 	newSt, err := sm.state.OnEvent(ctx, sm, ev)
 	if err != nil {
-		errLog(sm.state, ev, err).Msg("failed to process event")
-		errSt, err := sm.state.OnError(ctx, sm, err)
+		l.Err(err).Msg("failed to process event")
+		errSt, err := sm.state.OnError(ctx, ev, sm, err)
 		if err != nil {
-			errLog(sm.state, ev, err).Msg("failed to process error")
+			l.Err(err).Msg("failed to process error")
 		}
 		if errSt != nil {
 			newSt = errSt
@@ -141,17 +138,17 @@ func (sm *StateMachine[E, D]) handleEvent(ctx context.Context, ev E) {
 		newSt = sm.state
 	} else {
 		if err = sm.state.OnExit(ctx, sm); err != nil {
-			errLog(sm.state, ev, err).Msg("failed to process onExit")
+			l.Err(err).Msg("failed to process onExit")
 		}
 		if err := newSt.OnEnter(ctx, sm); err != nil {
-			errLog(newSt, ev, err).Msg("failed to process onEnter")
+			l.Err(err).Msg("failed to process onEnter")
 		}
 	}
 	sm.Logger.Debug().Msgf("{%s} transition [%s] (%s) => [%s]", sm.id, sm.state, ev, newSt.String())
 	sm.state = newSt
 }
 
-func NewStateMachine[E Event, D any](cfg *Config, init State[E, D], data *D) *StateMachine[E, D] {
+func NewStateMachine[E Event, D any](cfg *Config, init State[E, D], data *D) (*StateMachine[E, D], error) {
 	rt := &StateMachine[E, D]{
 		id:           cfg.Id,
 		Logger:       cfg.Logger,
@@ -162,7 +159,7 @@ func NewStateMachine[E Event, D any](cfg *Config, init State[E, D], data *D) *St
 	}
 	if !cfg.SkipInitEnter {
 		if err := rt.state.OnEnter(context.Background(), rt); err != nil {
-			rt.state, _ = rt.state.OnError(context.Background(), rt, err)
+			return nil, err
 		}
 	}
 	go func() {
@@ -177,5 +174,5 @@ func NewStateMachine[E Event, D any](cfg *Config, init State[E, D], data *D) *St
 			}
 		}
 	}()
-	return rt
+	return rt, nil
 }

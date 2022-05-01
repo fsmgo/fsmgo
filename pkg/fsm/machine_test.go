@@ -47,7 +47,7 @@ func (s *errState) OnExit(ctx context.Context, sm *StateMachine[myEvent, myState
 	return fmt.Errorf("err-OnExit")
 
 }
-func (s *errState) OnError(ctx context.Context, sm *StateMachine[myEvent, myStateContext], err error) (State[myEvent, myStateContext], error) {
+func (s *errState) OnError(ctx context.Context, e myEvent, sm *StateMachine[myEvent, myStateContext], err error) (State[myEvent, myStateContext], error) {
 	return nil, fmt.Errorf("err-OnError")
 }
 func (s *errState) String() string {
@@ -87,7 +87,7 @@ func (s *aState) OnExit(ctx context.Context, sm *StateMachine[myEvent, myStateCo
 	s.exitCalled = true
 	return nil
 }
-func (s *aState) OnError(ctx context.Context, sm *StateMachine[myEvent, myStateContext], err error) (State[myEvent, myStateContext], error) {
+func (s *aState) OnError(ctx context.Context, e myEvent, sm *StateMachine[myEvent, myStateContext], err error) (State[myEvent, myStateContext], error) {
 	s.err = err
 	return nil, nil
 }
@@ -131,7 +131,7 @@ func TestCreateFSM(t *testing.T) {
 		EventBacklogSize: 2,
 		Logger:           zerolog.New(zerolog.NewConsoleWriter()),
 	}
-	_ = NewStateMachine[myEvent, myStateContext](cfg, state, data)
+	_, _ = NewStateMachine[myEvent, myStateContext](cfg, state, data)
 	if !state.enterCalled {
 		t.Errorf("OnEnter not called on init state")
 	}
@@ -150,8 +150,8 @@ func TestTransition(t *testing.T) {
 
 	state1.transitions["foo"] = state2
 
-	sm := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
-	err := sm.ProcessEvent(context.Background(), "foo")
+	sm, err := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
+	err = sm.ProcessEvent(context.Background(), "foo")
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -178,8 +178,8 @@ func TestTransitionAsync(t *testing.T) {
 
 	state1.transitions["foo"] = state2
 
-	sm := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
-	err := sm.AddEvent("foo")
+	sm, err := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
+	err = sm.AddEvent("foo")
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -207,8 +207,8 @@ func TestTransitionUnknownEvent(t *testing.T) {
 
 	state1.transitions["foo"] = state2
 
-	sm := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
-	err := sm.ProcessEvent(context.Background(), "bar")
+	sm, err := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
+	err = sm.ProcessEvent(context.Background(), "bar")
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -241,8 +241,12 @@ func TestTransitionError(t *testing.T) {
 		state: state2,
 	}
 
-	sm := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
-	err := sm.ProcessEvent(context.Background(), "foo")
+	sm, err := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	err = sm.ProcessEvent(context.Background(), "foo")
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -274,8 +278,11 @@ func TestTransitionError2(t *testing.T) {
 		err: someErr,
 	}
 
-	sm := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
-	err := sm.ProcessEvent(context.Background(), "foo")
+	sm, err := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	err = sm.ProcessEvent(context.Background(), "foo")
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -304,8 +311,8 @@ func TestTransitionEnterError(t *testing.T) {
 	state2 := &errState{}
 	state1.transitions["foo"] = state2
 
-	sm := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
-	err := sm.ProcessEvent(context.Background(), "foo")
+	sm, err := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
+	err = sm.ProcessEvent(context.Background(), "foo")
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -324,9 +331,9 @@ func TestStopFSM(t *testing.T) {
 	data := &myStateContext{}
 	state1 := newState("init")
 
-	sm := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
+	sm, err := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
 	sm.Stop()
-	err := sm.AddEvent("foo")
+	err = sm.AddEvent("foo")
 	if err != ErrFSMStopped {
 		t.Errorf("Error expected: expected: %v, got: %v", ErrFSMStopped, err)
 	}
@@ -335,9 +342,9 @@ func TestStopFSM2(t *testing.T) {
 	data := &myStateContext{}
 	state1 := newState("init")
 
-	sm := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
+	sm, err := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
 	sm.Stop()
-	err := sm.ProcessEvent(context.TODO(), "foo")
+	err = sm.ProcessEvent(context.TODO(), "foo")
 	if err != ErrFSMStopped {
 		t.Errorf("Error expected: expected: %v, got: %v", ErrFSMStopped, err)
 	}
@@ -347,7 +354,7 @@ func TestDoubleStop(t *testing.T) {
 	data := &myStateContext{}
 	state1 := newState("init")
 
-	sm := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
+	sm, _ := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
 	sm.Stop()
 	sm.Stop()
 }
@@ -358,7 +365,7 @@ func TestSkipInitEnter(t *testing.T) {
 
 	cfg := testFsmConfig()
 	cfg.SkipInitEnter = true
-	_ = NewStateMachine[myEvent, myStateContext](cfg, state1, data)
+	_, _ = NewStateMachine[myEvent, myStateContext](cfg, state1, data)
 	if state1.enterCalled {
 		t.Errorf("OnEnter called when cfg.SkipInitEnter flag is set")
 	}
@@ -370,7 +377,7 @@ func TestSkipInitEnter2(t *testing.T) {
 
 	cfg := testFsmConfig()
 	cfg.SkipInitEnter = false
-	_ = NewStateMachine[myEvent, myStateContext](cfg, state1, data)
+	_, _ = NewStateMachine[myEvent, myStateContext](cfg, state1, data)
 	if !state1.enterCalled {
 		t.Errorf("OnEnter NOT called when cfg.SkipInitEnter flag is not set")
 	}

@@ -24,8 +24,11 @@ func Test{{$st}}{{.Method}}Async(t *testing.T) {
 		Logger: zerolog.New(zerolog.NewTestWriter(t)),
 	}
 	stCtx := newTestStateContext()
-	sm := fsm.NewStateMachine(&cfg, {{$st}}, stCtx)
-	err := sm.AddEvent(Event{
+	sm, err := fsm.NewStateMachine(&cfg, {{$st}}, stCtx)
+	if err != nil {
+        t.Errorf("FSM init error: %v", err)
+    }
+	err = sm.AddEvent(Event{
 		Type: Event{{.CapEvent}},
 	})
 	if err != nil {
@@ -49,9 +52,12 @@ func Test{{$st}}{{.Method}}Sync(t *testing.T) {
 		Logger: zerolog.New(zerolog.NewTestWriter(t)),
 	}
 	stCtx := newTestStateContext()
-    sm := fsm.NewStateMachine(&cfg, {{$st}}, stCtx)
+    sm, err := fsm.NewStateMachine(&cfg, {{$st}}, stCtx)
+    if err != nil {
+        t.Errorf("FSM init error: %v", err)
+    }
 	ctx := context.Background()
-	err := sm.ProcessEvent(ctx, Event{
+	err = sm.ProcessEvent(ctx, Event{
 		Type: Event{{.CapEvent}},
 	})
 	if err != nil {
