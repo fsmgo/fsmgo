@@ -28,16 +28,15 @@ type base struct {
 	h EventHandler
 }
 // OnError is a default error handler
-func (s *base) OnError(ctx context.Context, e Event, d *FSM, err error) (State, error) {
-	return nil, nil
+func (s *base) OnError(ctx context.Context, d *FSM, e Event, err error) State {
+	return nil
 }
 // OnEnter is a default enter handler
-func (s *base) OnEnter(ctx context.Context, d *FSM) error {
-	return nil
+func (s *base) OnEnter(ctx context.Context, d *FSM, e Event) (State, error) {
+	return nil, nil
 }
 // OnExit is a default exit handler
-func (s *base) OnExit(ctx context.Context, d *FSM) error {
-	return nil
+func (s *base) OnExit(ctx context.Context, d *FSM, e Event) {
 }
 
 // OnEvent is a main event handler function

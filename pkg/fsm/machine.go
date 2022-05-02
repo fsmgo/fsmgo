@@ -19,6 +19,7 @@ package fsm
 import (
 	"context"
 	"errors"
+	"github.com/rs/zerolog/log"
 	"sync"
 
 	"github.com/rs/zerolog"
@@ -27,13 +28,16 @@ import (
 // ErrFSMStopped is returned if event is added after the FSM has stopped
 var ErrFSMStopped = errors.New("FSM is stopped")
 
+// ErrFaultLimit indicates the limit for OnError(..) errors was reached
+var ErrFaultLimit = errors.New("fault limit reached")
+
 // State is an interface for any state controlled by FSM
 type State[E Event, D any] interface {
 	OnEvent(ctx context.Context, sm *StateMachine[E, D], e E) (State[E, D], error)
 
-	OnEnter(ctx context.Context, sm *StateMachine[E, D]) error
-	OnExit(ctx context.Context, sm *StateMachine[E, D]) error
-	OnError(ctx context.Context, e E, sm *StateMachine[E, D], err error) (State[E, D], error)
+	OnEnter(ctx context.Context, sm *StateMachine[E, D], e E) (State[E, D], error)
+	OnExit(ctx context.Context, sm *StateMachine[E, D], e E)
+	OnError(ctx context.Context, sm *StateMachine[E, D], e E, err error) State[E, D]
 
 	String() string
 }
@@ -52,8 +56,8 @@ type Config struct {
 	// EventBacklogSize if is set, do not call OnEnter on initial state
 	// when FSM created
 	SkipInitEnter bool
-	// Logger is the logger to Logger internal events
-	Logger zerolog.Logger
+	// limit the number of OnEnter iterations
+	ErrLimit int
 }
 
 // StateMachine is an implementation of FSM
@@ -66,9 +70,9 @@ type StateMachine[E Event, D any] struct {
 	state  State[E, D]
 	events chan E
 
-	lock sync.Mutex
-	evQ  sync.WaitGroup
-
+	lock     sync.Mutex
+	evQ      sync.WaitGroup
+	errLimit int
 	doneOnce sync.Once
 	stopped  bool
 	done     chan any
@@ -121,44 +125,69 @@ func (sm *StateMachine[E, D]) Done() <-chan any {
 
 func (sm *StateMachine[E, D]) handleEvent(ctx context.Context, ev E) {
 	defer sm.evQ.Done()
-	l := sm.Logger.Error().Stringer("State", sm.state).Stringer("Event", ev)
+	l := log.Ctx(ctx).With().Stringer("State", sm.state).Stringer("Event", ev).Logger()
 
 	newSt, err := sm.state.OnEvent(ctx, sm, ev)
 	if err != nil {
-		l.Err(err).Msg("failed to process event")
-		errSt, err := sm.state.OnError(ctx, ev, sm, err)
-		if err != nil {
-			l.Err(err).Msg("failed to process error")
-		}
+		l.Error().Err(err).Msg("failed to process event")
+		errSt := sm.state.OnError(ctx, sm, ev, err)
 		if errSt != nil {
 			newSt = errSt
 		}
 	}
+
 	if newSt == nil {
 		newSt = sm.state
 	} else {
-		if err = sm.state.OnExit(ctx, sm); err != nil {
-			l.Err(err).Msg("failed to process onExit")
+		sm.state.OnExit(ctx, sm, ev)
+		st, err := sm.onEnterLoop(ctx, sm.state, ev)
+		if err != nil {
+			l.Error().Err(err).Msg("failed to process onEnter")
 		}
-		if err := newSt.OnEnter(ctx, sm); err != nil {
-			l.Err(err).Msg("failed to process onEnter")
+		if st != nil {
+			newSt = st
 		}
 	}
-	sm.Logger.Debug().Msgf("{%s} transition [%s] (%s) => [%s]", sm.id, sm.state, ev, newSt.String())
+	l.Debug().Msgf("{%s} transition [%s] (%s) => [%s]", sm.id, sm.state, ev, newSt.String())
 	sm.state = newSt
+}
+
+func (sm *StateMachine[E, D]) onEnterLoop(ctx context.Context, s State[E, D], e E) (State[E, D], error) {
+	limit := sm.errLimit
+	shouldBreak := limit > 0
+	for ; !shouldBreak || limit > 0; limit-- {
+		next, err := s.OnEnter(ctx, sm, e)
+		if err == nil {
+			return next, nil
+		}
+		s = s.OnError(ctx, sm, e, err)
+	}
+	return nil, ErrFaultLimit
+}
+
+func (sm *StateMachine[E, D]) onEnter(ctx context.Context) error {
+	var e E
+	st, err := sm.onEnterLoop(ctx, sm.state, e)
+	if err != nil {
+		return err
+	}
+	if st != nil {
+		sm.state = st
+	}
+	return nil
 }
 
 func NewStateMachine[E Event, D any](cfg *Config, init State[E, D], data *D) (*StateMachine[E, D], error) {
 	rt := &StateMachine[E, D]{
 		id:           cfg.Id,
-		Logger:       cfg.Logger,
 		StateContext: data,
 		done:         make(chan any),
 		events:       make(chan E, cfg.EventBacklogSize),
 		state:        init,
+		errLimit:     cfg.ErrLimit,
 	}
 	if !cfg.SkipInitEnter {
-		if err := rt.state.OnEnter(context.Background(), rt); err != nil {
+		if err := rt.onEnter(context.Background()); err != nil {
 			return nil, err
 		}
 	}
