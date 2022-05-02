@@ -140,7 +140,7 @@ func (sm *StateMachine[E, D]) handleEvent(ctx context.Context, ev E) {
 		newSt = sm.state
 	} else {
 		sm.state.OnExit(ctx, sm, ev)
-		st, err := sm.onEnterLoop(ctx, sm.state, ev)
+		st, err := sm.onEnterLoop(ctx, newSt, ev)
 		if err != nil {
 			l.Error().Err(err).Msg("failed to process onEnter")
 		}
@@ -155,12 +155,18 @@ func (sm *StateMachine[E, D]) handleEvent(ctx context.Context, ev E) {
 func (sm *StateMachine[E, D]) onEnterLoop(ctx context.Context, s State[E, D], e E) (State[E, D], error) {
 	limit := sm.errLimit
 	shouldBreak := limit > 0
-	for ; !shouldBreak || limit > 0; limit-- {
+	for !shouldBreak || limit > 0 {
 		next, err := s.OnEnter(ctx, sm, e)
 		if err == nil {
 			return next, nil
 		}
 		s = s.OnError(ctx, sm, e, err)
+		if s == nil {
+			return next, err
+		}
+		if shouldBreak {
+			limit--
+		}
 	}
 	return nil, ErrFaultLimit
 }
