@@ -15,7 +15,14 @@ func newTestStateContext() *StateContext {
 }
 
 {{- end }}
-{{- $st := .CapState }}
+
+func Test{{.CapState}}FromName(t *testing.T) {
+    st, ok := FromStateName("{{.CapState}}")
+    if !ok || st != {{.CapState}} {
+        t.Errorf("FromStateName() failed. Expected: %v, got: %v", {{.CapState}} , st)
+    }
+}
+{{ $st := .CapState }}
 {{- $trs := .TransitionsMap }}
 {{- range .Events }}
 func Test{{$st}}{{.Method}}Async(t *testing.T) {

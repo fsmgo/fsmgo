@@ -39,7 +39,11 @@ type StateParam struct {
 type BaseParam struct {
 	Package string
 	Events  []EventInfo
+	States  []string
 }
+
+//go:embed templates/states.tmpl
+var statesTemplate string
 
 //go:embed templates/events.tmpl
 var eventsTemplate string
@@ -141,6 +145,7 @@ func Generate(cfg *Config) error {
 		return err
 	}
 
+	statesTempl := template.Must(template.New("states").Parse(statesTemplate))
 	eventsTempl := template.Must(template.New("events").Parse(eventsTemplate))
 	baseTempl := template.Must(template.New("base").Parse(baseTemplate))
 	stateTempl := template.Must(template.New("state").Parse(stateTemplate))
@@ -153,19 +158,19 @@ func Generate(cfg *Config) error {
 	if err := ensurePath(cfg.Path); err != nil {
 		return err
 	}
-	if err := exec(filepath.Join(cfg.Path, "events.go"), eventsTempl, b); err != nil {
-		return err
-	}
-	if err := exec(filepath.Join(cfg.Path, "base.go"), baseTempl, b); err != nil {
-		return err
-	}
+
 	needCommons := true
 	for _, state := range states {
+		lowState := strings.ToLower(state)
+		if reserved(lowState) {
+			return fmt.Errorf("%q state name is reserved", state)
+		}
 		st := convertCase(state)
 		tm := make(map[string]string)
 		for _, v := range stateTrans[state] {
 			tm[v.OrigEvent] = v.ToState
 		}
+		b.States = append(b.States, st)
 		s := &StateParam{
 			Package:        cfg.Pkg,
 			State:          strings.ToLower(st[:1]) + st[1:],
@@ -176,16 +181,39 @@ func Generate(cfg *Config) error {
 			CommonsHere:    needCommons,
 		}
 		needCommons = false
-		if err := exec(filepath.Join(cfg.Path, state+".go"), stateTempl, s); err != nil {
+		if err := exec(filepath.Join(cfg.Path, lowState+".go"), stateTempl, s); err != nil {
 			return err
 		}
 		if !cfg.NoTests {
-			if err := exec(filepath.Join(cfg.Path, state+"_test.go"), stateTestTempl, s); err != nil {
+			if err := exec(filepath.Join(cfg.Path, lowState+"_test.go"), stateTestTempl, s); err != nil {
 				return err
 			}
 		}
 	}
+	if err := exec(filepath.Join(cfg.Path, "events.go"), eventsTempl, b); err != nil {
+		return err
+	}
+	if err := exec(filepath.Join(cfg.Path, "states.go"), statesTempl, b); err != nil {
+		return err
+	}
+	if err := exec(filepath.Join(cfg.Path, "base.go"), baseTempl, b); err != nil {
+		return err
+	}
 	return nil
+}
+
+func reserved(state string) bool {
+	reserved := []string{
+		"base",
+		"states",
+		"events",
+	}
+	for _, r := range reserved {
+		if r == state {
+			return true
+		}
+	}
+	return false
 }
 
 func ensurePath(path string) error {

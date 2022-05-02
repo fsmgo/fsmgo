@@ -1,0 +1,11 @@
+package {{.Package}}
+
+func FromStateName(s string) (State, bool) {
+	switch s {
+{{- range .States }}
+	case {{.}}.String():
+		return {{.}}, true
+{{- end }}
+    }
+	return nil, false
+}
