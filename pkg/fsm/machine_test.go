@@ -19,7 +19,6 @@ package fsm
 import (
 	"context"
 	"fmt"
-	"github.com/rs/zerolog"
 	"testing"
 )
 
@@ -30,33 +29,36 @@ func (e myEvent) String() string {
 }
 
 type myStateContext struct {
-	x int
+	x        int
+	counters map[string]int
 }
 type errTransition struct {
 	err   error
-	state State[myEvent, myStateContext]
+	state SMState
+}
+
+type SMState = State[myEvent, myStateContext]
+type SM = StateMachine[myEvent, myStateContext]
+
+func newStateMachine(cfg *Config, init SMState, data *myStateContext) (*SM, error) {
+	return NewStateMachine[myEvent, myStateContext](cfg, init, data)
 }
 
 type errState struct {
 }
 
-func (s *errState) OnEnter(ctx context.Context, sm *StateMachine[myEvent, myStateContext]) error {
-	return fmt.Errorf("err-OnEnter")
+func (s *errState) OnEnter(ctx context.Context, sm *SM, e myEvent) (SMState, error) {
+	return nil, fmt.Errorf("err-OnEnter")
 }
-func (s *errState) OnExit(ctx context.Context, sm *StateMachine[myEvent, myStateContext]) error {
-	return fmt.Errorf("err-OnExit")
-
+func (s *errState) OnExit(ctx context.Context, sm *SM, e myEvent) {
 }
-func (s *errState) OnError(ctx context.Context, e myEvent, sm *StateMachine[myEvent, myStateContext], err error) (State[myEvent, myStateContext], error) {
-	return nil, fmt.Errorf("err-OnError")
+func (s *errState) OnError(ctx context.Context, sm *SM, e myEvent, err error) SMState {
+	return nil
 }
 func (s *errState) String() string {
 	return "err-state"
 }
-
-func (s *errState) OnEvent(ctx context.Context,
-	d *StateMachine[myEvent, myStateContext],
-	e myEvent) (State[myEvent, myStateContext], error) {
+func (s *errState) OnEvent(ctx context.Context, d *SM, e myEvent) (SMState, error) {
 	return nil, nil
 }
 
@@ -67,37 +69,36 @@ type aState struct {
 	exitCalled      bool
 	err             error
 	eventsProcessed int
-	transitions     map[myEvent]State[myEvent, myStateContext]
+	transitions     map[myEvent]SMState
 	errTransitions  map[myEvent]errTransition
 }
 
 func newState(name string) *aState {
 	return &aState{
 		name:           name,
-		transitions:    make(map[myEvent]State[myEvent, myStateContext]),
+		transitions:    make(map[myEvent]SMState),
 		errTransitions: make(map[myEvent]errTransition),
 	}
 }
 
-func (s *aState) OnEnter(ctx context.Context, sm *StateMachine[myEvent, myStateContext]) error {
+func (s *aState) OnEnter(ctx context.Context, sm *SM, e myEvent) (SMState, error) {
 	s.enterCalled = true
-	return nil
-}
-func (s *aState) OnExit(ctx context.Context, sm *StateMachine[myEvent, myStateContext]) error {
-	s.exitCalled = true
-	return nil
-}
-func (s *aState) OnError(ctx context.Context, e myEvent, sm *StateMachine[myEvent, myStateContext], err error) (State[myEvent, myStateContext], error) {
-	s.err = err
 	return nil, nil
+}
+func (s *aState) OnExit(ctx context.Context, sm *SM, e myEvent) {
+	s.exitCalled = true
+}
+func (s *aState) OnError(ctx context.Context, sm *SM, e myEvent, err error) SMState {
+	s.err = err
+	return nil
 }
 func (s *aState) String() string {
 	return s.name
 }
 
 func (s *aState) OnEvent(ctx context.Context,
-	d *StateMachine[myEvent, myStateContext],
-	e myEvent) (State[myEvent, myStateContext], error) {
+	d *SM,
+	e myEvent) (SMState, error) {
 	s.eventsProcessed++
 	if next, ok := s.errTransitions[e]; ok {
 		if next.state == nil {
@@ -115,7 +116,6 @@ func testFsmConfig() *Config {
 	return &Config{
 		Id:               "test-fsm",
 		EventBacklogSize: 2,
-		Logger:           zerolog.New(zerolog.NewConsoleWriter()),
 	}
 }
 
@@ -129,7 +129,6 @@ func TestCreateFSM(t *testing.T) {
 	cfg := &Config{
 		Id:               "test-fsm",
 		EventBacklogSize: 2,
-		Logger:           zerolog.New(zerolog.NewConsoleWriter()),
 	}
 	_, _ = NewStateMachine[myEvent, myStateContext](cfg, state, data)
 	if !state.enterCalled {
@@ -150,7 +149,7 @@ func TestTransition(t *testing.T) {
 
 	state1.transitions["foo"] = state2
 
-	sm, err := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
+	sm, err := newStateMachine(testFsmConfig(), state1, data)
 	err = sm.ProcessEvent(context.Background(), "foo")
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -178,7 +177,7 @@ func TestTransitionAsync(t *testing.T) {
 
 	state1.transitions["foo"] = state2
 
-	sm, err := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
+	sm, err := newStateMachine(testFsmConfig(), state1, data)
 	err = sm.AddEvent("foo")
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -207,7 +206,7 @@ func TestTransitionUnknownEvent(t *testing.T) {
 
 	state1.transitions["foo"] = state2
 
-	sm, err := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
+	sm, err := newStateMachine(testFsmConfig(), state1, data)
 	err = sm.ProcessEvent(context.Background(), "bar")
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -241,7 +240,7 @@ func TestTransitionError(t *testing.T) {
 		state: state2,
 	}
 
-	sm, err := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
+	sm, err := newStateMachine(testFsmConfig(), state1, data)
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -278,7 +277,7 @@ func TestTransitionError2(t *testing.T) {
 		err: someErr,
 	}
 
-	sm, err := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
+	sm, err := newStateMachine(testFsmConfig(), state1, data)
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -311,7 +310,7 @@ func TestTransitionEnterError(t *testing.T) {
 	state2 := &errState{}
 	state1.transitions["foo"] = state2
 
-	sm, err := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
+	sm, err := newStateMachine(testFsmConfig(), state1, data)
 	err = sm.ProcessEvent(context.Background(), "foo")
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
@@ -331,7 +330,7 @@ func TestStopFSM(t *testing.T) {
 	data := &myStateContext{}
 	state1 := newState("init")
 
-	sm, err := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
+	sm, err := newStateMachine(testFsmConfig(), state1, data)
 	sm.Stop()
 	err = sm.AddEvent("foo")
 	if err != ErrFSMStopped {
@@ -342,7 +341,7 @@ func TestStopFSM2(t *testing.T) {
 	data := &myStateContext{}
 	state1 := newState("init")
 
-	sm, err := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
+	sm, err := newStateMachine(testFsmConfig(), state1, data)
 	sm.Stop()
 	err = sm.ProcessEvent(context.TODO(), "foo")
 	if err != ErrFSMStopped {
@@ -354,7 +353,7 @@ func TestDoubleStop(t *testing.T) {
 	data := &myStateContext{}
 	state1 := newState("init")
 
-	sm, _ := NewStateMachine[myEvent, myStateContext](testFsmConfig(), state1, data)
+	sm, _ := newStateMachine(testFsmConfig(), state1, data)
 	sm.Stop()
 	sm.Stop()
 }
@@ -365,7 +364,7 @@ func TestSkipInitEnter(t *testing.T) {
 
 	cfg := testFsmConfig()
 	cfg.SkipInitEnter = true
-	_, _ = NewStateMachine[myEvent, myStateContext](cfg, state1, data)
+	_, _ = newStateMachine(cfg, state1, data)
 	if state1.enterCalled {
 		t.Errorf("OnEnter called when cfg.SkipInitEnter flag is set")
 	}
@@ -377,8 +376,44 @@ func TestSkipInitEnter2(t *testing.T) {
 
 	cfg := testFsmConfig()
 	cfg.SkipInitEnter = false
-	_, _ = NewStateMachine[myEvent, myStateContext](cfg, state1, data)
+	_, _ = newStateMachine(cfg, state1, data)
 	if !state1.enterCalled {
 		t.Errorf("OnEnter NOT called when cfg.SkipInitEnter flag is not set")
+	}
+}
+
+type errEnterState struct {
+	aState
+	entCount int
+}
+
+func (s *errEnterState) OnEnter(ctx context.Context, sm *SM, e myEvent) (SMState, error) {
+	sm.StateContext.counters["enter"]++
+	return &errEnterState{entCount: s.entCount + 1}, fmt.Errorf("err-OnEnter")
+}
+
+func (s *errEnterState) OnError(ctx context.Context, sm *SM, e myEvent, err error) SMState {
+	sm.StateContext.counters["errors"]++
+	return &errEnterState{entCount: s.entCount + 1}
+}
+
+func TestOnEnterErr(t *testing.T) {
+	data := &myStateContext{
+		counters: make(map[string]int),
+	}
+	state1 := &errEnterState{}
+
+	cfg := testFsmConfig()
+	cfg.ErrLimit = 12
+
+	_, err := newStateMachine(cfg, state1, data)
+	if err != ErrFaultLimit {
+		t.Errorf("a ErrFaultLimit error is expected")
+	}
+	if v := data.counters["enter"]; v != 12 {
+		t.Errorf("12 enters expected, got %v", v)
+	}
+	if v := data.counters["errors"]; v != 12 {
+		t.Errorf("12 errors expected, got %v", v)
 	}
 }
