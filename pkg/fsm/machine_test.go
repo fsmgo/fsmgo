@@ -417,3 +417,35 @@ func TestOnEnterErr(t *testing.T) {
 		t.Errorf("12 errors expected, got %v", v)
 	}
 }
+
+func TestTransitionSyncSM(t *testing.T) {
+	data := &myStateContext{
+		x: 155,
+	}
+	state1 := newState("init")
+	state2 := newState("next")
+
+	state1.transitions["foo"] = state2
+
+	cfg := testFsmConfig()
+	cfg.Sync = true
+
+	sm, err := newStateMachine(cfg, state1, data)
+	err = sm.AddEvent("foo")
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	sm.Stop()
+	if sm.State() != state2.String() {
+		t.Errorf("Unexpected state: expected %s, got %s", state2.String(), sm.State())
+	}
+	if !state1.exitCalled {
+		t.Errorf("OnExit not called on init state")
+	}
+	if !state2.enterCalled {
+		t.Errorf("OnEnter not called on init state")
+	}
+	if state1.eventsProcessed != 1 {
+		t.Errorf("Wrong events counter on init state: expected %d, got %d", 1, state1.eventsProcessed)
+	}
+}

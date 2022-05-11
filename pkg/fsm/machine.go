@@ -58,6 +58,8 @@ type Config struct {
 	SkipInitEnter bool
 	// limit the number of OnEnter iterations
 	ErrLimit int
+	// if Sync, event queue is not used, event processing is always blocking
+	Sync bool
 }
 
 // StateMachine is an implementation of FSM
@@ -75,6 +77,7 @@ type StateMachine[E Event, D any] struct {
 	errLimit int
 	doneOnce sync.Once
 	stopped  bool
+	async    bool
 	done     chan any
 }
 
@@ -84,9 +87,10 @@ func (sm *StateMachine[E, D]) ProcessEvent(ctx context.Context, e E) error {
 	if sm.stopped {
 		return ErrFSMStopped
 	}
-	sm.evQ.Wait()
-
-	sm.evQ.Add(1)
+	if sm.async {
+		sm.evQ.Wait()
+		sm.evQ.Add(1)
+	}
 	sm.handleEvent(ctx, e)
 	return nil
 }
@@ -97,8 +101,12 @@ func (sm *StateMachine[E, D]) AddEvent(e E) error {
 	if sm.stopped {
 		return ErrFSMStopped
 	}
-	sm.evQ.Add(1)
-	sm.events <- e
+	if sm.async {
+		sm.evQ.Add(1)
+		sm.events <- e
+	} else {
+		sm.handleEvent(context.Background(), e)
+	}
 	return nil
 }
 
@@ -108,8 +116,9 @@ func (sm *StateMachine[E, D]) Stop() {
 	if sm.stopped {
 		return
 	}
-	sm.evQ.Wait()
-
+	if sm.async {
+		sm.evQ.Wait()
+	}
 	sm.doneOnce.Do(func() {
 		close(sm.done)
 		sm.stopped = true
@@ -124,7 +133,9 @@ func (sm *StateMachine[E, D]) Done() <-chan any {
 }
 
 func (sm *StateMachine[E, D]) handleEvent(ctx context.Context, ev E) {
-	defer sm.evQ.Done()
+	if sm.async {
+		defer sm.evQ.Done()
+	}
 	l := log.Ctx(ctx).With().Stringer("State", sm.state).Stringer("Event", ev).Logger()
 
 	newSt, err := sm.state.OnEvent(ctx, sm, ev)
@@ -188,8 +199,8 @@ func NewStateMachine[E Event, D any](cfg *Config, init State[E, D], data *D) (*S
 		id:           cfg.Id,
 		StateContext: data,
 		done:         make(chan any),
-		events:       make(chan E, cfg.EventBacklogSize),
 		state:        init,
+		async:        !cfg.Sync,
 		errLimit:     cfg.ErrLimit,
 	}
 	if !cfg.SkipInitEnter {
@@ -197,17 +208,20 @@ func NewStateMachine[E Event, D any](cfg *Config, init State[E, D], data *D) (*S
 			return nil, err
 		}
 	}
-	go func() {
-		defer close(rt.events)
-		ctx := context.Background()
-		for {
-			select {
-			case <-rt.done:
-				return
-			case ev := <-rt.events:
-				rt.handleEvent(ctx, ev)
+	if rt.async {
+		rt.events = make(chan E, cfg.EventBacklogSize)
+		go func() {
+			defer close(rt.events)
+			ctx := context.Background()
+			for {
+				select {
+				case <-rt.done:
+					return
+				case ev := <-rt.events:
+					rt.handleEvent(ctx, ev)
+				}
 			}
-		}
-	}()
+		}()
+	}
 	return rt, nil
 }
