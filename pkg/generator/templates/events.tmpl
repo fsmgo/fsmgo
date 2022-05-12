@@ -4,3 +4,9 @@ package {{.Package}}
 // Event{{.CapEvent}} is a constant for "{{.Event}}" event
 const Event{{.CapEvent}} = "{{.Event}}"
 {{- end }}
+
+func NewEvent(s string) Event {
+    return Event {
+        Type: s,
+    }
+}

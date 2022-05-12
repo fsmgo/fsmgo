@@ -33,9 +33,7 @@ func Test{{$st}}{{.Method}}Async(t *testing.T) {
 	if err != nil {
         t.Errorf("FSM init error: %v", err)
     }
-	err = sm.AddEvent(Event{
-		Type: Event{{.CapEvent}},
-	})
+	err = sm.AddEvent(NewEvent(Event{{.CapEvent}}))
 	if err != nil {
 		t.Errorf("FSM error: %v", err)
 	}
@@ -60,10 +58,9 @@ func Test{{$st}}{{.Method}}Sync(t *testing.T) {
     if err != nil {
         t.Errorf("FSM init error: %v", err)
     }
+
 	ctx := context.Background()
-	err = sm.ProcessEvent(ctx, Event{
-		Type: Event{{.CapEvent}},
-	})
+	err = sm.ProcessEvent(ctx, NewEvent(Event{{.CapEvent}}))
 	if err != nil {
 		t.Errorf("FSM error: %v", err)
 	}

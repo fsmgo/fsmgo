@@ -60,6 +60,8 @@ type Config struct {
 	ErrLimit int
 	// if Sync, event queue is not used, event processing is always blocking
 	Sync bool
+	// Logger is used to log transitions for async events
+	Logger zerolog.Logger
 }
 
 // StateMachine is an implementation of FSM
@@ -105,7 +107,8 @@ func (sm *StateMachine[E, D]) AddEvent(e E) error {
 		sm.evQ.Add(1)
 		sm.events <- e
 	} else {
-		sm.handleEvent(context.Background(), e)
+		ctx := sm.Logger.WithContext(context.Background())
+		sm.handleEvent(ctx, e)
 	}
 	return nil
 }
@@ -124,6 +127,7 @@ func (sm *StateMachine[E, D]) Stop() {
 		sm.stopped = true
 	})
 }
+
 func (sm *StateMachine[E, D]) State() string {
 	return sm.state.String()
 }
@@ -212,7 +216,7 @@ func NewStateMachine[E Event, D any](cfg *Config, init State[E, D], data *D) (*S
 		rt.events = make(chan E, cfg.EventBacklogSize)
 		go func() {
 			defer close(rt.events)
-			ctx := context.Background()
+			ctx := rt.Logger.WithContext(context.Background())
 			for {
 				select {
 				case <-rt.done:
