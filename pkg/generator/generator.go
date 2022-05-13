@@ -17,6 +17,7 @@
 package generator
 
 import (
+	// embed templates
 	_ "embed"
 	"fmt"
 	"html/template"
@@ -66,20 +67,24 @@ type EventInfo struct {
 func convertCase(s string) string {
 	s = strings.ReplaceAll(s, "_", " ")
 	s = strings.Title(s)
+
 	return strings.ReplaceAll(s, " ", "")
 }
 
 func eventsToMethods(evs []string) []EventInfo {
 	var rt []EventInfo
+
 	for _, e := range evs {
 		capEvent := convertCase(e)
 		m := "On" + capEvent
+
 		rt = append(rt, EventInfo{
 			Event:    e,
 			CapEvent: capEvent,
 			Method:   m,
 		})
 	}
+
 	return rt
 }
 
@@ -88,12 +93,15 @@ func exec(fp string, t *template.Template, data any) error {
 	if err != nil {
 		return err
 	}
+
 	defer func() { _ = f.Close() }()
+
 	return t.Execute(f, data)
 }
 
 func has(ss []string, s string) bool {
 	idx := sort.SearchStrings(ss, s)
+
 	return idx < len(ss) && ss[idx] == s
 }
 
@@ -108,20 +116,24 @@ func validateTransitions(states []string, events []string, transitions [][3]stri
 	// validate transitions
 	for _, tr := range transitions {
 		if !has(states, tr[0]) {
-			return nil, fmt.Errorf("invalid 'from' state in transitin %s(%s)=>%s", tr[0], tr[1], tr[2])
+			return nil, fmt.Errorf("invalid 'from' state in transition %s(%s)=>%s", tr[0], tr[1], tr[2])
 		}
+
 		if !has(states, tr[2]) {
-			return nil, fmt.Errorf("invalid 'to' state in transitin %s(%s)=>%s", tr[0], tr[1], tr[2])
+			return nil, fmt.Errorf("invalid 'to' state in transition %s(%s)=>%s", tr[0], tr[1], tr[2])
 		}
+
 		if !has(events, tr[1]) {
-			return nil, fmt.Errorf("invalid event in transitin %s(%s)=>%s", tr[0], tr[1], tr[2])
+			return nil, fmt.Errorf("invalid event in transition %s(%s)=>%s", tr[0], tr[1], tr[2])
 		}
+
 		stateTrans[tr[0]] = append(stateTrans[tr[0]], transitionInfo{
 			OrigEvent: tr[1],
 			Event:     convertCase(tr[1]),
 			ToState:   convertCase(tr[2]),
 		})
 	}
+
 	return stateTrans, nil
 }
 
@@ -160,16 +172,20 @@ func Generate(cfg *Config) error {
 	}
 
 	needCommons := true
+
 	for _, state := range states {
 		lowState := strings.ToLower(state)
 		if reserved(lowState) {
 			return fmt.Errorf("%q state name is reserved", state)
 		}
+
 		st := convertCase(state)
 		tm := make(map[string]string)
+
 		for _, v := range stateTrans[state] {
 			tm[v.OrigEvent] = v.ToState
 		}
+
 		b.States = append(b.States, st)
 		s := &StateParam{
 			Package:        cfg.Pkg,
@@ -181,24 +197,30 @@ func Generate(cfg *Config) error {
 			CommonsHere:    needCommons,
 		}
 		needCommons = false
+
 		if err := exec(filepath.Join(cfg.Path, lowState+".go"), stateTempl, s); err != nil {
 			return err
 		}
+
 		if !cfg.NoTests {
 			if err := exec(filepath.Join(cfg.Path, lowState+"_test.go"), stateTestTempl, s); err != nil {
 				return err
 			}
 		}
 	}
+
 	if err := exec(filepath.Join(cfg.Path, "events.go"), eventsTempl, b); err != nil {
 		return err
 	}
+
 	if err := exec(filepath.Join(cfg.Path, "states.go"), statesTempl, b); err != nil {
 		return err
 	}
+
 	if err := exec(filepath.Join(cfg.Path, "base.go"), baseTempl, b); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -213,9 +235,10 @@ func reserved(state string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
 func ensurePath(path string) error {
-	return os.MkdirAll(path, 0755)
+	return os.MkdirAll(path, 0o755)
 }

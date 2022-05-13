@@ -37,27 +37,32 @@ type errTransition struct {
 	state SMState
 }
 
-type SMState = State[myEvent, myStateContext]
-type SM = StateMachine[myEvent, myStateContext]
+type (
+	SMState = State[myEvent, myStateContext]
+	SM      = StateMachine[myEvent, myStateContext]
+)
 
 func newStateMachine(cfg *Config, init SMState, data *myStateContext) (*SM, error) {
 	return NewStateMachine[myEvent, myStateContext](cfg, init, data)
 }
 
-type errState struct {
-}
+type errState struct{}
 
 func (s *errState) OnEnter(ctx context.Context, sm *SM, e myEvent) (SMState, error) {
 	return nil, fmt.Errorf("err-OnEnter")
 }
+
 func (s *errState) OnExit(ctx context.Context, sm *SM, e myEvent) {
 }
+
 func (s *errState) OnError(ctx context.Context, sm *SM, e myEvent, err error) SMState {
 	return nil
 }
+
 func (s *errState) String() string {
 	return "err-state"
 }
+
 func (s *errState) OnEvent(ctx context.Context, d *SM, e myEvent) (SMState, error) {
 	return nil, nil
 }
@@ -85,20 +90,24 @@ func (s *aState) OnEnter(ctx context.Context, sm *SM, e myEvent) (SMState, error
 	s.enterCalled = true
 	return nil, nil
 }
+
 func (s *aState) OnExit(ctx context.Context, sm *SM, e myEvent) {
 	s.exitCalled = true
 }
+
 func (s *aState) OnError(ctx context.Context, sm *SM, e myEvent, err error) SMState {
 	s.err = err
 	return nil
 }
+
 func (s *aState) String() string {
 	return s.name
 }
 
 func (s *aState) OnEvent(ctx context.Context,
 	d *SM,
-	e myEvent) (SMState, error) {
+	e myEvent,
+) (SMState, error) {
 	s.eventsProcessed++
 	if next, ok := s.errTransitions[e]; ok {
 		if next.state == nil {
@@ -114,7 +123,7 @@ func (s *aState) OnEvent(ctx context.Context,
 
 func testFsmConfig() *Config {
 	return &Config{
-		Id:               "test-fsm",
+		ID:               "test-fsm",
 		EventBacklogSize: 2,
 	}
 }
@@ -127,16 +136,19 @@ func TestCreateFSM(t *testing.T) {
 	}
 	state := newState("")
 	cfg := &Config{
-		Id:               "test-fsm",
+		ID:               "test-fsm",
 		EventBacklogSize: 2,
 	}
 	_, _ = NewStateMachine[myEvent, myStateContext](cfg, state, data)
+
 	if !state.enterCalled {
 		t.Errorf("OnEnter not called on init state")
 	}
+
 	if state.exitCalled {
 		t.Errorf("OnExit called on init state")
 	}
+
 	if state.eventsProcessed > 0 {
 		t.Errorf("OnEvent called on init state")
 	}
@@ -149,8 +161,8 @@ func TestTransition(t *testing.T) {
 
 	state1.transitions["foo"] = state2
 
-	sm, err := newStateMachine(testFsmConfig(), state1, data)
-	err = sm.ProcessEvent(context.Background(), "foo")
+	sm, _ := newStateMachine(testFsmConfig(), state1, data)
+	err := sm.ProcessEvent(context.Background(), "foo")
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -206,8 +218,8 @@ func TestTransitionUnknownEvent(t *testing.T) {
 
 	state1.transitions["foo"] = state2
 
-	sm, err := newStateMachine(testFsmConfig(), state1, data)
-	err = sm.ProcessEvent(context.Background(), "bar")
+	sm, _ := newStateMachine(testFsmConfig(), state1, data)
+	err := sm.ProcessEvent(context.Background(), "bar")
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
@@ -337,6 +349,7 @@ func TestStopFSM(t *testing.T) {
 		t.Errorf("Error expected: expected: %v, got: %v", ErrFSMStopped, err)
 	}
 }
+
 func TestStopFSM2(t *testing.T) {
 	data := &myStateContext{}
 	state1 := newState("init")
@@ -435,16 +448,21 @@ func TestTransitionSyncSM(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
+
 	sm.Stop()
+
 	if sm.State() != state2.String() {
 		t.Errorf("Unexpected state: expected %s, got %s", state2.String(), sm.State())
 	}
+
 	if !state1.exitCalled {
 		t.Errorf("OnExit not called on init state")
 	}
+
 	if !state2.enterCalled {
 		t.Errorf("OnEnter not called on init state")
 	}
+
 	if state1.eventsProcessed != 1 {
 		t.Errorf("Wrong events counter on init state: expected %d, got %d", 1, state1.eventsProcessed)
 	}

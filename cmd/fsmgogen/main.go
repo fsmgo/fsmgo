@@ -19,18 +19,21 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/fsmgo/fsmgo/pkg/generator"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/fsmgo/fsmgo/pkg/generator"
 )
 
-var states = flag.String("states", "", "comma-separated list of states")
-var events = flag.String("events", "", "comma-separated list of events")
-var transitions = flag.String("transitions", "", "comma-separated list of from:event:to tuples")
-var packg = flag.String("package", "", "target package")
-var notests = flag.Bool("notests", false, "do not generate tests")
-var dir = flag.String("dir", "", "target path to put generated files in")
+var (
+	states      = flag.String("states", "", "comma-separated list of states")
+	events      = flag.String("events", "", "comma-separated list of events")
+	transitions = flag.String("transitions", "", "comma-separated list of from:event:to tuples")
+	packg       = flag.String("package", "", "target package")
+	notests     = flag.Bool("notests", false, "do not generate tests")
+	dir         = flag.String("dir", "", "target path to put generated files in")
+)
 
 const version = "0.0.2"
 

@@ -16,34 +16,36 @@ func newTestStateContext() *StateContext {
 {{- end }}
 
 func Test{{.CapState}}FromName(t *testing.T) {
-    st, ok := FromStateName("{{.CapState}}")
-    if !ok || st != {{.CapState}} {
-        t.Errorf("FromStateName() failed. Expected: %v, got: %v", {{.CapState}} , st)
-    }
+	st, ok := FromStateName("{{.CapState}}")
+	if !ok || st != {{.CapState}} {
+		t.Errorf("FromStateName() failed. Expected: %v, got: %v", {{.CapState}}, st)
+	}
 }
 {{ $st := .CapState }}
 {{- $trs := .TransitionsMap }}
 {{- range .Events }}
 func Test{{$st}}{{.Method}}Async(t *testing.T) {
 	cfg := fsm.Config{
-		Id:     "test",
+		Id: "test",
 	}
 	stCtx := newTestStateContext()
+
 	sm, err := fsm.NewStateMachine(&cfg, {{$st}}, stCtx)
 	if err != nil {
-        t.Errorf("FSM init error: %v", err)
-    }
+		t.Errorf("FSM init error: %v", err)
+	}
+
 	err = sm.AddEvent(NewEvent(Event{{.CapEvent}}))
 	if err != nil {
 		t.Errorf("FSM error: %v", err)
 	}
-	sm.Stop()
 
-	{{- if index $trs .Event }}
+	sm.Stop()
+{{ if index $trs .Event }}
 	expected := {{ index $trs .Event }}
-	{{- else }}
+{{- else }}
 	expected := {{ $st }}
-	{{- end }}
+{{- end }}
 	if expected.String() != sm.State() {
 		t.Errorf("Unexpected state: got %v, expected %v\n", sm.State(), expected.String())
 	}
@@ -51,25 +53,26 @@ func Test{{$st}}{{.Method}}Async(t *testing.T) {
 
 func Test{{$st}}{{.Method}}Sync(t *testing.T) {
 	cfg := fsm.Config{
-		Id:     "test",
+		Id: "test",
 	}
 	stCtx := newTestStateContext()
-    sm, err := fsm.NewStateMachine(&cfg, {{$st}}, stCtx)
-    if err != nil {
-        t.Errorf("FSM init error: %v", err)
-    }
+
+	sm, err := fsm.NewStateMachine(&cfg, {{$st}}, stCtx)
+	if err != nil {
+		t.Errorf("FSM init error: %v", err)
+	}
 
 	ctx := context.Background()
+
 	err = sm.ProcessEvent(ctx, NewEvent(Event{{.CapEvent}}))
 	if err != nil {
 		t.Errorf("FSM error: %v", err)
 	}
-
-	{{- if index $trs .Event }}
+{{ if index $trs .Event }}
 	expected := {{ index $trs .Event }}
-	{{- else }}
+{{- else }}
 	expected := {{ $st }}
-	{{- end }}
+{{- end }}
 	if expected.String() != sm.State() {
 		t.Errorf("Unexpected state: got %v, expected %v\n", sm.State(), expected.String())
 	}

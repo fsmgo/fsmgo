@@ -2,21 +2,24 @@ package {{.Package}}
 
 import (
 	"context"
+
 	"github.com/fsmgo/fsmgo/pkg/fsm"
 )
 
 type Event struct {
 	Type string
 }
+
 func (e Event) String() string {
 	return e.Type
 }
 
-type StateContext struct {
-}
+type StateContext struct{}
 
-type FSM = fsm.StateMachine[Event, StateContext]
-type State = fsm.State[Event, StateContext]
+type (
+	FSM   = fsm.StateMachine[Event, StateContext]
+	State = fsm.State[Event, StateContext]
+)
 
 type EventHandler interface {
 	{{- range .Events }}
@@ -27,19 +30,22 @@ type EventHandler interface {
 type base struct {
 	h EventHandler
 }
-// OnError is a default error handler
+
+// OnError is a default error handler.
 func (s *base) OnError(ctx context.Context, d *FSM, e Event, err error) State {
 	return nil
 }
-// OnEnter is a default enter handler
+
+// OnEnter is a default enter handler.
 func (s *base) OnEnter(ctx context.Context, d *FSM, e Event) (State, error) {
 	return nil, nil
 }
-// OnExit is a default exit handler
+
+// OnExit is a default exit handler.
 func (s *base) OnExit(ctx context.Context, d *FSM, e Event) {
 }
 
-// OnEvent is a main event handler function
+// OnEvent is a main event handler function.
 func (s *base) OnEvent(ctx context.Context, d *FSM, e Event) (State, error) {
 	switch e.Type {
 	{{- range .Events }}
@@ -49,6 +55,7 @@ func (s *base) OnEvent(ctx context.Context, d *FSM, e Event) (State, error) {
 	default:
 		d.Logger.Warn().Msgf("unknown event: %v", e.Type)
 	}
+
 	return nil, nil
 }
 

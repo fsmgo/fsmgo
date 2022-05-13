@@ -10,9 +10,10 @@ type {{.State}}State struct {
 // {{.CapState}} is a singleton object for "{{.State}}"
 var {{.CapState}} State = init{{.CapState}}()
 
-func init{{.CapState}}() *{{ $state }}{
+func init{{.CapState}}() *{{ $state }} {
 	s := &{{ $state }}{}
 	s.h = s
+
 	return s
 }
 

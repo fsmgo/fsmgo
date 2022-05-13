@@ -19,19 +19,20 @@ package fsm
 import (
 	"context"
 	"errors"
-	"github.com/rs/zerolog/log"
 	"sync"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/rs/zerolog"
 )
 
-// ErrFSMStopped is returned if event is added after the FSM has stopped
+// ErrFSMStopped is returned if event is added after the FSM has stopped.
 var ErrFSMStopped = errors.New("FSM is stopped")
 
-// ErrFaultLimit indicates the limit for OnError(..) errors was reached
+// ErrFaultLimit indicates the limit for OnError(..) errors was reached.
 var ErrFaultLimit = errors.New("fault limit reached")
 
-// State is an interface for any state controlled by FSM
+// State is an interface for any state controlled by FSM.
 type State[E Event, D any] interface {
 	OnEvent(ctx context.Context, sm *StateMachine[E, D], e E) (State[E, D], error)
 
@@ -42,26 +43,26 @@ type State[E Event, D any] interface {
 	String() string
 }
 
-// Event is an interface for any event used by FSM
+// Event is an interface for any event used by FSM.
 type Event interface {
 	String() string
 }
 
-// Config is a configuration of a State machine
+// Config is a configuration of a State machine.
 type Config struct {
-	// Id is and id of the sm
-	Id string
+	// ID is and id of the sm
+	ID string
 	// EventBacklogSize is the size of the Event queue
 	EventBacklogSize uint
+	// limit the number of OnEnter iterations
+	ErrLimit int
+	// Logger is used to log transitions for async events
+	Logger zerolog.Logger
 	// EventBacklogSize if is set, do not call OnEnter on initial state
 	// when FSM created
 	SkipInitEnter bool
-	// limit the number of OnEnter iterations
-	ErrLimit int
 	// if Sync, event queue is not used, event processing is always blocking
 	Sync bool
-	// Logger is used to log transitions for async events
-	Logger zerolog.Logger
 }
 
 // StateMachine is an implementation of FSM
@@ -86,13 +87,16 @@ type StateMachine[E Event, D any] struct {
 func (sm *StateMachine[E, D]) ProcessEvent(ctx context.Context, e E) error {
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
+
 	if sm.stopped {
 		return ErrFSMStopped
 	}
+
 	if sm.async {
 		sm.evQ.Wait()
 		sm.evQ.Add(1)
 	}
+
 	sm.handleEvent(ctx, e)
 	return nil
 }
@@ -103,6 +107,7 @@ func (sm *StateMachine[E, D]) AddEvent(e E) error {
 	if sm.stopped {
 		return ErrFSMStopped
 	}
+
 	if sm.async {
 		sm.evQ.Add(1)
 		sm.events <- e
@@ -110,18 +115,22 @@ func (sm *StateMachine[E, D]) AddEvent(e E) error {
 		ctx := sm.Logger.WithContext(context.Background())
 		sm.handleEvent(ctx, e)
 	}
+
 	return nil
 }
 
 func (sm *StateMachine[E, D]) Stop() {
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
+
 	if sm.stopped {
 		return
 	}
+
 	if sm.async {
 		sm.evQ.Wait()
 	}
+
 	sm.doneOnce.Do(func() {
 		close(sm.done)
 		sm.stopped = true
@@ -140,11 +149,13 @@ func (sm *StateMachine[E, D]) handleEvent(ctx context.Context, ev E) {
 	if sm.async {
 		defer sm.evQ.Done()
 	}
+
 	l := log.Ctx(ctx).With().Stringer("State", sm.state).Stringer("Event", ev).Logger()
 
 	newSt, err := sm.state.OnEvent(ctx, sm, ev)
 	if err != nil {
 		l.Error().Err(err).Msg("failed to process event")
+
 		errSt := sm.state.OnError(ctx, sm, ev, err)
 		if errSt != nil {
 			newSt = errSt
@@ -163,6 +174,7 @@ func (sm *StateMachine[E, D]) handleEvent(ctx context.Context, ev E) {
 			newSt = st
 		}
 	}
+
 	l.Debug().Msgf("{%s} transition [%s] (%s) => [%s]", sm.id, sm.state, ev, newSt.String())
 	sm.state = newSt
 }
@@ -170,11 +182,13 @@ func (sm *StateMachine[E, D]) handleEvent(ctx context.Context, ev E) {
 func (sm *StateMachine[E, D]) onEnterLoop(ctx context.Context, s State[E, D], e E) (State[E, D], error) {
 	limit := sm.errLimit
 	shouldBreak := limit > 0
+
 	for !shouldBreak || limit > 0 {
 		next, err := s.OnEnter(ctx, sm, e)
 		if err == nil {
 			return next, nil
 		}
+
 		s = s.OnError(ctx, sm, e, err)
 		if s == nil {
 			return next, err
@@ -183,6 +197,7 @@ func (sm *StateMachine[E, D]) onEnterLoop(ctx context.Context, s State[E, D], e 
 			limit--
 		}
 	}
+
 	return nil, ErrFaultLimit
 }
 
@@ -200,7 +215,7 @@ func (sm *StateMachine[E, D]) onEnter(ctx context.Context) error {
 
 func NewStateMachine[E Event, D any](cfg *Config, init State[E, D], data *D) (*StateMachine[E, D], error) {
 	rt := &StateMachine[E, D]{
-		id:           cfg.Id,
+		id:           cfg.ID,
 		StateContext: data,
 		done:         make(chan any),
 		state:        init,
@@ -217,6 +232,7 @@ func NewStateMachine[E Event, D any](cfg *Config, init State[E, D], data *D) (*S
 		go func() {
 			defer close(rt.events)
 			ctx := rt.Logger.WithContext(context.Background())
+
 			for {
 				select {
 				case <-rt.done:
