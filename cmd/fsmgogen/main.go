@@ -35,7 +35,7 @@ var (
 	dir         = flag.String("dir", "", "target path to put generated files in")
 )
 
-const version = "0.0.2"
+const version = "0.0.4-pre02"
 
 func main() {
 	fmt.Fprintf(os.Stdout, "FSMgo generator v%s\n", version)
